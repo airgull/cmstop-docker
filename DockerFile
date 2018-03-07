@@ -1,6 +1,7 @@
 FROM centos:centos6
 LABEL author="airgull<airgull@sina.com>"
-RUN yum -y install wget tar vixie-cron crontabs curl-devel expat-devel gettext-devel devel zlib-devel perl-devel
+RUN yum -y groupinstall development
+RUN yum -y install wget tar  crontabs curl-devel expat-devel gettext-devel devel zlib-devel perl-devel
 # Install php rpm
 RUN rpm --import http://ftp.riken.jp/Linux/fedora/epel/RPM-GPG-KEY-EPEL-6 && \
     rpm -Uvh https://mirror.webtatic.com/yum/el6/latest.rpm
