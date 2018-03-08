@@ -1,0 +1,185 @@
+# FROM 10.0.1.74:80/library/centos:6.8
+FROM centos:6.9
+ENV role="www" \
+    htdocs="/data/www" \
+    INSTALLDIR="/usr/local/server" \
+    LOGDIR="/var/log/server" \
+    YUM="/etc/yum.repos.d" \
+    SRC="/usr/local/src" \
+    CURDIR="$CURDIR" \
+    TimeZone="/usr/share/zoneinfo/Asia/Shanghai"
+
+#设置时区、创建用户，**此处的用户与nginx容器要保持一致**
+RUN cp $TimeZone /etc/localtime \
+    && groupadd nginx -g 10000 \
+    && useradd -u 10000 -s /sbin/nologin -M -g nginx nginx
+
+#--设置yum,安装更新必须的组件
+# RUN cd /etc/yum.repos.d \
+#     && mkdir bak \
+#     && mv *.repo bak \
+#     && curl -O http://21.122.72.78/repo/kjzgw-centos6-base.repo \
+#     && curl -O http://21.122.72.78/repo/kjzgw-epel6.repo \
+#     && sed -i "s#code.zzb.kj#21.122.72.78#g" *.repo \
+#     && yum -y update \
+#     && rm -f Cen* \
+#     && yum -y install wget zip gcc gcc-c++ autoconf automake make cmake libtool libjpeg libjpeg-devel  libpng libpng-devel freetype freetype-devel libiconv libxml2 libxml2-devel zlib zlib-devel glibc glibc-devel  glib2 glib2-devel bzip2 bzip2-devel ncurses ncurses-devel curl curl-devel e2fsprogs e2fsprogs-devel krb5 krb5-devel libidn libidn-devel openssl openssl-devel openldap openldap-devel nss_ldap openldap-clients openldap-servers libpcap libpcap-devel libmcrypt libmcrypt-devel readline-devel pcre-devel net-snmp net-snmp-devel memcached \
+#     && yum clean all
+
+RUN yum -y update \
+    && yum -y install wget zip gcc gcc-c++ autoconf automake make cmake libtool libjpeg libjpeg-devel  libpng libpng-devel freetype freetype-devel libiconv libxml2 libxml2-devel zlib zlib-devel glibc glibc-devel  glib2 glib2-devel bzip2 bzip2-devel ncurses ncurses-devel curl curl-devel e2fsprogs e2fsprogs-devel krb5 krb5-devel libidn libidn-devel openssl openssl-devel openldap openldap-devel nss_ldap openldap-clients openldap-servers libpcap libpcap-devel libmcrypt libmcrypt-devel readline-devel pcre-devel net-snmp net-snmp-devel memcached \
+    && yum clean all
+
+#--准备php54的相关组件，并编译安装
+RUN cd $SRC \
+    && mkdir conf \
+    && cd conf \
+    && wget http://118.190.147.227/php5/php54.ini \
+    && wget http://118.190.147.227/php5/php-fpm54.conf \
+    && wget http://118.190.147.227/php5/info.php \
+    && cd .. \
+    && mkdir tar \
+    && cd tar \
+    && wget http://118.190.147.227/php5/php-5.4.25.tar.gz \
+    && tar -zxvf php-5.4.25.tar.gz -C $SRC \    
+    && cd $SRC/php-5.4.25 \
+    && ./configure --prefix=$INSTALLDIR/php \
+                   --with-config-file-path=$INSTALLDIR/php/etc \
+                   --with-libdir=$libdir \
+                   --enable-mysqlnd \
+                   --with-mysql=mysqlnd \
+                   --with-mysqli=mysqlnd \
+                   --enable-pdo \
+                   --with-pdo-mysql=mysqlnd \
+                   --with-iconv-dir=/usr/local \
+                   --with-freetype-dir \
+                   --with-jpeg-dir \
+                   --with-png-dir \
+                   --with-zlib \
+                   --with-libxml-dir=/usr \
+                   --enable-xml \
+                   --enable-pcntl \
+                   --disable-rpath \
+                   --enable-bcmath \
+                   --enable-shmop \
+                   --enable-sysvsem \
+                   --enable-inline-optimization \
+                   --with-curl \
+                   --with-curlwrappers \
+                   --enable-fpm \
+                   --enable-mbstring \
+                   --enable-mbregex \
+                   --with-gd \
+                   --enable-gd-native-ttf \
+                   --with-openssl \
+                   --enable-sockets \
+                   --with-xmlrpc \
+                   --enable-zip \
+                   --with-mcrypt \
+                   --with-snmp \
+                   --enable-json \
+                   --enable-dom \
+                   --enable-ftp \
+                   --without-pear \
+    && [ $(uname -i) == 'x86_64' ] || make ZEND_EXTRA_LIBS='-liconv' \
+    && [ $(uname -i) == 'x86_64' ] && make \
+    && make install \
+    && rm -rf $SRC/tar/* \
+    && cd $SRC \
+    && rm -rf $SRC/php-5.4.25 \
+
+RUN cd $SRC/tar \ 
+    && wget http://118.190.147.227/php5/freetds-stable.tgz \
+    && wget http://118.190.147.227/php5/memcache-3.0.8.tgz \
+    && wget http://118.190.147.227/php5/redis-2.2.4.tar \
+    && wget http://118.190.147.227/php5/scws-1.2.2.tar.bz2 \
+    && wget http://118.190.147.227/php5/scws-dict-chs-utf8.tar.bz2 \
+    && wget http://118.190.147.227/php5/xcache-3.1.0.tar.gz \
+    # && wget http://118.190.147.227/php5/xhprof-0.9.4.tgz \
+    && wget http://118.190.147.227/php5/yaf-2.3.3.tgz \
+    && wget http://118.190.147.227/php5/ZendGuardLoader-70429-PHP-5.4-linux-glibc23-x86_64.tar.gz \
+    && wget http://118.190.147.227/php5/ZendOptimizer-3.3.9-linux-glibc23-x86_64.tar.gz \
+    && tar -zxvf memcache-3.0.8.tgz -C $SRC \
+    && tar -xvf redis-php-2.2.4.tar -C $SRC \
+    && tar -jxvf scws-1.2.2.tar.bz2 -C $SRC \
+    && tar -jxvf scws-dict-chs-utf8.tar.bz2 -C $SRC \
+    && tar -zxvf xcache-3.1.0.tar.gz -C $SRC \
+    && tar -zxvf freetds-stable.tgz -C $SRC \
+    # && tar -zxvf xhprof-0.9.4.tgz -C $SRC \
+    && tar -zxvf yaf-2.3.3.tgz -C $SRC \
+    && cd $SRC/memcache-3.0.8 \
+    && $INSTALLDIR/php/bin/phpize \
+    && ./configure --with-php-config=$INSTALLDIR/php/bin/php-config \
+    && make  \
+    && make install \
+    && cd $SRC/redis-2.2.4 \
+    && $INSTALLDIR/php/bin/phpize \
+    && ./configure --with-php-config=$INSTALLDIR/php/bin/php-config \
+    && make \
+    && make install \
+    && cd $SRC/xcache-3.1.0 \
+    && $INSTALLDIR/php/bin/phpize \
+    && ./configure --with-php-config=$INSTALLDIR/php/bin/php-config \
+    && make \
+    && make install \
+    && cd $SRC/scws-1.2.2 \
+    && ./configure --prefix=$INSTALLDIR/scws \
+    && make \
+    && make install \
+    && cd phpext \
+    && $INSTALLDIR/php/bin/phpize \
+    && ./configure --with-scws=$INSTALLDIR/scws --with-php-config=$INSTALLDIR/php/bin/php-config \
+    && make \
+    && make install \
+    && cp $SRC/dict.utf8.xdb $INSTALLDIR/scws/etc \
+    && chmod 644 -R $INSTALLDIR/scws/etc/* \
+    && cd $SRC/yaf-2.3.5 \
+    && $INSTALLDIR/php/bin/phpize  \
+    && ./configure --with-php-config=$INSTALLDIR/php/bin/php-config  \
+    && make \
+    && make install \
+    && cd $SRC/tar \
+    && tar zxvf ZendGuardLoader-70429-PHP-5.4-linux-glibc23-x86_64.tar.gz -C $SRC \
+    && cp -f $SRC/ZendGuardLoader-70429-PHP-5.4-linux-glibc23-x86_64/php-5.4.x/ZendGuardLoader.so $INSTALLDIR/php/lib/php/extensions/no-debug-non-zts-20100525/ZendGuardLoader.so \
+    && [ -f /etc/php.ini -a ! -f /etc/php.ini.default ] && mv /etc/php.ini /etc/php.ini.default \
+    && [ -f /etc/php.ini ] && mv /etc/php.ini /etc/php.ini.$(date +%F_%T) \
+    && cd $INSTALLDIR/php/etc/ \
+    && [ -f php.ini -a ! -f php.ini.default ] && mv php.ini php.ini.default \
+    && [ -f php.ini ] && mv php.ini php.ini.$(date +%F_%T) \
+    && [ -f php-fpm.conf -a ! -f php-fpm.conf.default ] && mv php-fpm.conf php-fpm.conf.default \
+    && [ -f php-fpm.conf ] && mv php-fpm.conf php-fpm.conf.$(date +%F_%T) \
+    && cp $SRC/conf/php54.ini $INSTALLDIR/php/etc/php.ini \
+    && cp $SRC/conf/php-fpm54.conf $INSTALLDIR/php/etc/php-fpm.conf \
+    && cp $SRC/conf/info.php $htdocs \
+    && sed -i 's#/usr/lib/php/modules#'$INSTALLDIR/php/lib/php/extensions/no-debug-non-zts-20100525'#g' $INSTALLDIR/php/etc/php.ini \
+    && sed -i 's#/usr/local/server#'$INSTALLDIR'#g' $INSTALLDIR/php/etc/php.ini \
+    && sed -i 's#/www/htdocs#'$htdocs'#g' $INSTALLDIR/php/etc/php.ini \
+    && sed -i 's#/var/log/php#'$LOGDIR/php'#g' $INSTALLDIR/php/etc/php.ini \
+    && sed -i 's#/var/log/server/php#'$LOGDIR/php'#g' $INSTALLDIR/php/etc/php.ini \
+    && sed -i 's#/www/htdocs#'$htdocs'#g' $INSTALLDIR/php/etc/php-fpm.conf \
+    && sed -i 's#/var/log/php#'$LOGDIR/php'#g' $INSTALLDIR/php/etc/php-fpm.conf \
+    && sed -i 's#127.0.0.1:##g' $INSTALLDIR/php/etc/php-fpm.conf \
+    && mkdir -p /tmp/session \
+    && chown -R nginx:nginx /tmp/session \
+    && [ -d $LOGDIR/php ]||mkdir -p $LOGDIR/php \
+    && chown -R nginx:nginx $LOGDIR/php \
+    && [ -f /etc/init.d/php-fpm -a ! -f /etc/init.d/php-fpm.default ] && mv /etc/init.d/php-fpm /etc/init.d/php-fpm.default \
+    && [ -f /etc/init.d/php-fpm ] && mv /etc/init.d/php-fpm /etc/init.d/php-fpm.$(date +%F_%T) \
+    && cp $SRC/php-5.4.25/sapi/fpm/init.d.php-fpm /etc/init.d/php-fpm \
+    && chmod 755 /etc/init.d/php-fpm \
+    && grep "$INSTALLDIR/php/bin/" /etc/profile || echo 'export PATH=$PATH:'$INSTALLDIR'/php/bin/' >> /etc/profile \
+    && source /etc/profile \
+    && chkconfig php-fpm on \
+    && rm -rf $SRC/*
+
+#--定义需要持久化的存储卷
+VOLUME $htdocs
+VOLUME $LOGDIR/php
+VOLUME $INSTALLDIR/php/etc/
+
+
+
+EXPOSE 9000 9001
+
+
+
